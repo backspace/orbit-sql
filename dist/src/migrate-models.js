@@ -1,0 +1,76 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.migrateModel = exports.migrateModels = void 0;
+const inflected_1 = require("inflected");
+const utils_1 = require("./utils");
+async function migrateModels(db, schema) {
+    for (let type in schema.models) {
+        await migrateModel(db, schema, type);
+    }
+}
+exports.migrateModels = migrateModels;
+async function migrateModel(db, schema, type) {
+    const tableName = inflected_1.tableize(type);
+    const joinTables = {};
+    const hasTable = await db.schema.hasTable(tableName);
+    if (hasTable) {
+        return;
+    }
+    await db.schema.createTable(tableName, (table) => {
+        table.uuid('id').primary();
+        table.timestamps(true, true);
+        schema.eachAttribute(type, (property, attribute) => {
+            if (!['updatedAt', 'createdAt'].includes(property)) {
+                let columnName = inflected_1.underscore(property);
+                switch (attribute.type) {
+                    case 'string':
+                        table.string(columnName);
+                        break;
+                    case 'number':
+                        table.integer(columnName);
+                        break;
+                    case 'boolean':
+                        table.boolean(columnName);
+                        break;
+                    case 'date':
+                        table.date(columnName);
+                        break;
+                    case 'datetime':
+                        table.dateTime(columnName);
+                        break;
+                }
+            }
+        });
+        schema.eachRelationship(type, (property, { kind, type, inverse }) => {
+            const columnName = inflected_1.foreignKey(property);
+            if (kind === 'hasOne') {
+                table.uuid(columnName);
+            }
+            else {
+                if (!inverse || !type) {
+                    throw new Error(`SQLSource: "type" and "inverse" are required on a relationship`);
+                }
+                if (Array.isArray(type)) {
+                    throw new Error(`SQLSource: polymorphic types are not supported yet`);
+                }
+                let relDef = schema.getRelationship(type, inverse);
+                if ((relDef === null || relDef === void 0 ? void 0 : relDef.kind) === 'hasMany') {
+                    joinTables[utils_1.tableizeJoinTable(property, inverse)] = [
+                        columnName,
+                        inflected_1.foreignKey(inverse),
+                    ];
+                }
+            }
+        });
+    });
+    for (let joinTableName in joinTables) {
+        if (!(await db.schema.hasTable(joinTableName))) {
+            await db.schema.createTable(joinTableName, (table) => {
+                table.uuid(joinTables[joinTableName][0]);
+                table.uuid(joinTables[joinTableName][1]);
+            });
+        }
+    }
+}
+exports.migrateModel = migrateModel;
+//# sourceMappingURL=migrate-models.js.map
