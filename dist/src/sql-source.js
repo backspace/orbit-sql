@@ -56,7 +56,7 @@ let SQLSource = class SQLSource extends records_1.RecordSource {
             await this.transformed([transform]);
             return {
                 transform: [transform],
-                data,
+                data: Array.isArray(transform.operations) ? data : data[0],
             };
         }
     }
@@ -67,7 +67,7 @@ let SQLSource = class SQLSource extends records_1.RecordSource {
         const data = await this._processor.query(query);
         return {
             transform: [],
-            data,
+            data: Array.isArray(data) ? data[0] : data,
         };
     }
 };
